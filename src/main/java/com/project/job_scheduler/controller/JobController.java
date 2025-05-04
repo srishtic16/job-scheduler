@@ -43,4 +43,15 @@ public class JobController {
         }
     }
 
+    @PostMapping("/{id}/trigger")
+    public String triggerJobNow(@PathVariable UUID id) {
+        boolean triggered = jobSchedulerService.triggerJobNow(id);
+        if (triggered) {
+            return "Job triggered immediately: " + id;
+        } else {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found or cannot be triggered.");
+        }
+    }
+
+
 }

@@ -2,8 +2,15 @@ package com.project.job_scheduler.service;
 
 import com.project.job_scheduler.model.JobRequest;
 import com.project.job_scheduler.model.ScheduledJob;
+import com.project.job_scheduler.model.ScheduledJobEntity;
+import com.project.job_scheduler.repository.JobUpdateRepository;
+import com.project.job_scheduler.repository.ScheduledJobRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -19,6 +26,9 @@ public class JobSchedulerService {
         private final Thread schedulerThread;
         private final Map<UUID, ScheduledJob> jobMap = new ConcurrentHashMap<>();
 
+        @Autowired
+        private ScheduledJobRepository scheduledJobRepository;
+
         public JobSchedulerService() {
             jobQueue = new PriorityBlockingQueue<>();
             executor = Executors.newFixedThreadPool(10); // Thread pool of 10 workers
@@ -31,7 +41,31 @@ public class JobSchedulerService {
 
     public UUID scheduleJob(JobRequest jobRequest) {
         long executeAt = System.currentTimeMillis() + jobRequest.getDelayInMillis();
-        ScheduledJob job = new ScheduledJob(jobRequest.getName(), executeAt);
+        LocalDateTime scheduledTime = LocalDateTime.ofInstant(
+                Instant.now().plusMillis(jobRequest.getDelayInMillis()),
+                ZoneId.systemDefault());
+
+
+        ScheduledJobEntity entity = new ScheduledJobEntity(
+                jobRequest.getName(),
+                scheduledTime,
+                ScheduledJob.JobStatus.PENDING
+        );
+
+         entity = scheduledJobRepository.save(entity);
+        Runnable task = () -> {
+            System.out.println("Executing job: " + jobRequest.getName());
+            // Simulated business logic
+            try {
+                Thread.sleep(2000);
+                System.out.println("Completed job: " + jobRequest.getName());
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        };
+
+
+        ScheduledJob job = new ScheduledJob(jobRequest.getName(), executeAt );
 
         jobQueue.put(job); // Add to queue
         jobMap.put(job.getId(), job); // Add to job map
@@ -75,6 +109,19 @@ public class JobSchedulerService {
 
         return false;
     }
+
+    public boolean triggerJobNow(UUID id) {
+        ScheduledJob job = jobMap.get(id);
+        if (job == null) return false;
+
+        if (job.getStatus() == ScheduledJob.JobStatus.PENDING) {
+            jobQueue.remove(job);
+        }
+
+        executor.submit(job); // Run immediately
+        return true;
+    }
+
 }
 
 
